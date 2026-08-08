@@ -14,6 +14,7 @@ from .execution import (
     read_via_command,
 )
 from .gates import single_source, two_source
+from .procedures import CoverageReport, Procedure, ProcedureLibrary
 from .provenance import Fact, MissingProvenance, Provenance, SourceKind, read
 from .signals import ExternalSignal, SignalSource, TriggerKind, should_retrieve
 
@@ -23,6 +24,7 @@ __all__ = [
     "Act",
     "CommandPolicy",
     "CommandRefused",
+    "CoverageReport",
     "Decision",
     "Escalate",
     "Event",
@@ -31,6 +33,8 @@ __all__ = [
     "ExternalSignal",
     "Fact",
     "MissingProvenance",
+    "Procedure",
+    "ProcedureLibrary",
     "Provenance",
     "ShellResult",
     "SignalSource",

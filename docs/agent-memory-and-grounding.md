@@ -91,7 +91,29 @@ handoff path. Without a modeled abstention, the agent will always produce *somet
 Monitor the abstention rate. A rate of exactly zero across a week is an alarm, not a
 success.
 
-### 4.5 Execution sits inside the gates, not around them
+### 4.5 Retrieval must be able to return nothing
+
+Procedural memory (§3 layer 4) is normally loaded from an SOP corpus. Two failure
+modes come with the documents and must be closed before retrieving from them.
+
+**Similarity search always returns its best match.** It has no representation of
+"nothing here applies." Asked about a situation no SOP covers, it returns the
+nearest document, and that answer reads exactly as confident as a correct one. An
+SOP set documents the *modal path* by construction — which means every off-path
+question, precisely the expensive ones, lands in this hole. Retrieval therefore
+enforces a relevance floor and abstains below it, and escalates rather than
+choosing when two procedures score within a margin of each other.
+
+**Documents go stale silently.** An SOP describing a screen that changed in the
+last upgrade is wrong at full confidence. Procedures carry an owner, an effective
+date, a last-verified date, a review interval, and a supersession pointer. One
+past review escalates for re-verification instead of being served as current.
+
+A corpus should also be measured rather than assumed: running the library against
+real situations drawn from the event log produces a coverage figure, and the
+uncovered set is the honest answer to what the documents actually bought.
+
+### 4.6 Execution sits inside the gates, not around them
 
 Shell access is the largest hole in everything above. Every gate in this document
 is bypassed by one unconstrained subprocess call: `UPDATE inventory SET …` does

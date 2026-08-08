@@ -24,6 +24,7 @@ class AbstainReason(Enum):
     INSUFFICIENT_SOURCES = "insufficient_sources"
     NOT_INDEPENDENT = "not_independent"
     UNGROUNDED_SOURCE = "ungrounded_source"
+    NO_APPLICABLE_PROCEDURE = "no_applicable_procedure"
 
 
 @dataclass(frozen=True, slots=True)
