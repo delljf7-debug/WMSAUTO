@@ -294,7 +294,30 @@ Where the honest answer is *"nothing does,"* that is not a gap to paper over wit
 memory. It is the precise point at which abstention (§4.4) and human confirmation are the
 only correct outputs.
 
-## 11. Honest limit
+## 11. Prior art
+
+Nothing in this document is invented. It is an assembly of established patterns applied to
+one domain, and it is worth being explicit about that: the names below are the correct
+search terms for the literature, and the correct vocabulary when hiring for this work.
+
+| Section | Established name | Origin |
+|---|---|---|
+| §3 episodic log | Event sourcing | Formalized by Fowler c. 2005; the idea is as old as the accounting ledger |
+| §6.1 bounded episodes | Crash-only software; stateless service design | Candea & Fox, HotOS 2003; the 12-factor app |
+| §6.4 watchdog | Supervision trees, "let it crash" | Erlang/OTP, Ericsson |
+| §4.3 two-source gate | N-version programming | Chen & Avizienis, late 1970s |
+| §4.3 human escalation | Maker-checker, four-eyes principle, dual control | Banking and industrial ops |
+| §4.4 abstention | Reject option in classification; selective prediction | Chow, c. 1970 |
+| §4.2 scan-to-confirm | Poka-yoke (mistake-proofing) | Shingo, Toyota Production System, 1960s |
+| §4.1 provenance triples | Data lineage; W3C PROV | Data engineering; PROV standardized 2013 |
+| §5.3 rule 2 quarantine | Taint tracking; trust boundaries | Security engineering |
+| §4.1 grounding | Attribution and grounded generation | Active area at every major LLM lab |
+
+The contribution here is the assembly and the through-line (§2, §10), not any individual
+mechanism. Treat any claim that this constitutes novel technique with the same skepticism
+the rest of this document applies to unsourced assertions.
+
+## 12. Honest limit
 
 "Never wrong" is not achievable and should not be claimed. The achievable and correct goal:
 
