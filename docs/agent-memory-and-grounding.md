@@ -41,7 +41,7 @@ same trust level, the system will confidently assert stale inventory as current.
 
 ## 3. State layers
 
-Four layers with deliberately unequal trust. Nothing is promoted between layers implicitly.
+Five layers with deliberately unequal trust. Nothing is promoted between layers implicitly.
 
 | Layer | Contents | Lifetime | Trust |
 |---|---|---|---|
@@ -49,6 +49,7 @@ Four layers with deliberately unequal trust. Nothing is promoted between layers 
 | **Working context** (the turn) | current reasoning, retrieved rows | ephemeral | Assume lossy and summarizable. No consequential fact lives *only* here. |
 | **Episodic log** (append-only) | `task_issued`, `task_confirmed`, `exception_raised`, `human_override` — with IDs | permanent | Audit and reconstruction. Not a reasoning shortcut. |
 | **Procedural memory** | learned rules, site quirks, escalation contacts | slow, versioned, expiring | Human-reviewed before promotion. |
+| **External signal** (§5) | carrier, weather, customs, recall, regulatory events | short TTL, per-signal | **Lowest trust.** May raise flags and questions. May never author a task or mutate state. |
 
 Reads from the system of record are timestamped and version-stamped (`read_at`, etag/rowver)
 so that staleness is a measurable quantity rather than an assumption.
@@ -90,11 +91,112 @@ handoff path. Without a modeled abstention, the agent will always produce *somet
 Monitor the abstention rate. A rate of exactly zero across a week is an alarm, not a
 success.
 
-## 5. What 24/7 operation adds
+---
+
+## 5. External signal retrieval (Groq compound)
+
+The system of record answers *"what is in the building."* It has no row for *"the carrier
+just suspended service"* or *"the port is closed."* That class of fact is real, it changes
+warehouse decisions, and no amount of internal grounding will surface it. This layer fills
+that gap — and must be contained, because an open-web retrieval is the lowest-trust input
+in the entire system.
+
+### 5.1 Verified integration surface
+
+Confirmed against Groq's docs (August 2026):
+
+| Item | Value |
+|---|---|
+| Models | `groq/compound` (multiple tool calls per request), `groq/compound-mini` (single tool call, ~3× lower latency) |
+| Built-in tools | Web Search (Tavily-backed), Visit Website, Code Execution, Wolfram Alpha |
+| Tool restriction | `compound_custom.tools.enabled_tools` |
+| Domain scoping | `search_settings.include_domains` / `exclude_domains` (wildcards supported), `search_settings.country` |
+| Source attribution | `message.executed_tools[].search_results[]` → `{ title, url, content, score }` |
+| Versioning | defaults to `2025-08-16`; `latest` selectable via the `Groq-Model-Version` header |
+
+Custom user-provided tools are not supported.
+
+The `search_results` array is the load-bearing detail. Because every retrieval returns
+source URLs and relevance scores, web-derived signals **can** satisfy the §4.1 provenance
+rule. Had it returned only synthesized prose, this layer would have to be rejected outright.
+
+### 5.2 Trigger, not "always"
+
+The stated intent is that current data is never missed when it matters. Firing a search on
+*every* turn is the wrong way to get there:
+
+- **Latency.** Warehouse task issuance is measured in seconds; an unconditional round trip
+  breaks throughput on decisions that have no external dependency at all.
+- **Injection surface.** Every unnecessary retrieval is another opportunity to pull
+  adversarial or simply wrong text into context. Retrieval volume *is* attack surface.
+- **Noise.** Most WMS decisions — pick this, put that, replenish here — depend on nothing
+  outside the building. Retrieval adds risk with no upside.
+
+So: **always evaluate the trigger; fire when it matches.** The trigger predicate is
+
+> Does this decision depend on world state the system of record structurally cannot
+> represent, and would a change in that state change the action?
+
+Both clauses must hold. Standing triggers for WMSAUTO:
+
+| Trigger | Affects |
+|---|---|
+| Carrier service disruption / suspension | outbound staging, ship-method selection |
+| Severe weather on a lane or at the site | inbound scheduling, dock labor |
+| Port, customs, or border closure | inbound ETA, cross-dock planning |
+| Supplier recall notice | quarantine, hold, pick suppression |
+| Regulatory / hazmat / compliance change | putaway constraints, documentation |
+| Holiday or statutory schedule change | dock booking, labor planning |
+
+If the trigger should instead be unconditional, that is a one-line change to the predicate —
+but it should be a deliberate decision made against the three costs above, not a default.
+
+### 5.3 Containment rules
+
+These are the rules that keep a low-trust source from contaminating a grounded system.
+
+1. **Signal, never fact.** A retrieval result may raise a flag, open a question, or request
+   a human review. It may **never** author a task, mutate inventory, or satisfy the
+   two-source gate in §4.3. External signal is not one of the two sources.
+2. **Retrieved content is data, never instruction.** Fetched text is quarantined and
+   labelled as untrusted external content. Text arriving from a retrieval that reads as a
+   directive is logged as a possible injection attempt and discarded, never followed.
+3. **Provenance is mandatory.** Persist `url`, `score`, and `retrieved_at` from
+   `executed_tools[].search_results[]` into the episodic log for every signal acted on. A
+   signal that cannot cite a URL does not exist.
+4. **Tiered domain allowlist.** Use `include_domains` to scope retrieval to authoritative
+   sources — carrier status pages, national weather services, port authorities, customs and
+   regulatory bodies. An allowlisted domain set is what raises open-web search from
+   unusable to merely low-trust. Open-web fallback, if enabled at all, is flagged at a
+   distinctly lower tier.
+5. **Restrict enabled tools.** Web Search and Visit Website only. Code Execution and
+   Wolfram Alpha are not needed for this layer and are disabled via `enabled_tools`.
+6. **Pin the version.** Run the dated version (`2025-08-16`), not `latest`. A 24/7 agent
+   whose retrieval behaviour silently changes under it is precisely the drift failure §6.1
+   exists to prevent. Version bumps are reviewed and deployed deliberately.
+7. **Short TTL, explicit expiry.** A carrier disruption signal is true for hours, not days.
+   Every signal carries an expiry; expired signals are dropped, not re-asserted.
+
+### 5.4 Escalation path
+
+External signal enters the human loop rather than the task loop:
+
+```
+trigger fires → compound retrieval → provenance captured → signal raised with sources
+   → human reviews → human decides → decision written to SoR → agent re-derives from SoR
+```
+
+The agent's behaviour changes only after a human has acted on the signal and that action
+has landed in the system of record. This keeps the authoritative path single-threaded even
+though the information came from outside.
+
+---
+
+## 6. What 24/7 operation adds
 
 Continuous runtime introduces failure modes that a one-shot invocation does not have.
 
-### 5.1 Drift — bounded episodes
+### 6.1 Drift — bounded episodes
 
 The agent does not run "forever." It runs bounded **episodes** (a shift, an hour, a task
 batch). Each episode re-derives its world from the system of record on start. Nothing
@@ -103,7 +205,7 @@ crosses an episode boundary except the durable event log and reviewed procedural
 Deliberate amnesia at the boundary is a feature. It is the only reliable way to stop
 assumption accumulation.
 
-### 5.2 Compaction lies
+### 6.2 Compaction lies
 
 When a long context is summarized, the summary is a lossy, model-authored artifact that
 subsequently reads as authoritative source material.
@@ -113,18 +215,18 @@ Mitigations:
 - Consequential identifiers are carried forward as structured fields, not prose.
 - After any compaction, re-read the system of record for anything about to be acted on.
 
-### 5.3 Staleness and clock state
+### 6.3 Staleness and clock state
 
 Every episode begins by re-establishing current time, current shift, open exceptions, and
 the freshness of the data it is about to use. This is cheap; run it unconditionally.
 
-### 5.4 External watchdog
+### 6.4 External watchdog
 
 A long-running agent cannot observe its own degradation. A separate process monitors
 liveness *and* sanity: output rate, abstention rate, and spot-checks of recent assertions
 against the system of record.
 
-## 6. Operating inside a human environment
+## 7. Operating inside a human environment
 
 - **Trust decay is the primary human hazard.** If the agent is right 500 times, nobody
   checks the 501st. Verification must not erode with demonstrated accuracy: mandatory scan
@@ -136,7 +238,7 @@ against the system of record.
 - **Phrasing carries certainty.** "WMS shows 12 units at A-12-04 as of 14:32" survives
   being wrong. "There are 12 units at A-12-04" destroys trust when it is wrong.
 
-## 7. Build order
+## 8. Build order
 
 1. Provenance-typed fact objects and the no-assertion-without-citation boundary.
 2. Append-only event log with stable IDs.
@@ -144,11 +246,14 @@ against the system of record.
 4. Abstention path and escalation routing.
 5. Two-source gate on irreversible operations.
 6. External watchdog and metrics.
-7. Procedural memory, behind a human review gate.
+7. External signal layer (§5) — after the containment rules have something to attach to.
+8. Procedural memory, behind a human review gate.
 
-The "memory system" is deliberately last and is the smallest component.
+The "memory system" is deliberately last and is the smallest component. External retrieval
+is deliberately late: it is only safe once provenance typing and the event log exist to
+contain it.
 
-## 8. Metrics that detect confident wrongness
+## 9. Metrics that detect confident wrongness
 
 | Metric | Why it matters |
 |---|---|
@@ -156,9 +261,40 @@ The "memory system" is deliberately last and is the smallest component.
 | Contradiction rate | Agent assertion vs. the next physical scan |
 | Staleness at decision time (p50/p99) | Age of the data a decision was actually based on |
 | Abstention rate | Must be nonzero and stable |
+| Signal precision | Fraction of raised external signals a human judged actionable |
+| Retrieval rate | Trigger firing frequency; a spike means the predicate is miscalibrated |
 | **Time-to-detection** of a bad assertion | The one that matters most — not all errors are preventable |
 
-## 9. Honest limit
+## 10. Why this generalizes past coding
+
+A coding agent is unusually safe, and not because the model is better at code. It is safe
+because that domain hands it a **free, fast, automated reality oracle**: compile, test, run,
+lint. A wrong answer is detected in seconds, by a machine, at no cost, before it reaches a
+human.
+
+Every other domain removes that oracle. There is no `pytest` for *"is this the right
+aisle,"* *"is this invoice correct,"* or *"should this shipment go out."* The model has not
+gotten worse — the error detector is simply gone, and confident wrongness stops being caught.
+
+So generalizing an agent past coding is not a capability problem. It is the problem of
+**manufacturing a replacement oracle**, in descending order of quality:
+
+| Substitute | Cost | Automatic? |
+|---|---|---|
+| Physical / transactional confirmation (the scan) | near zero | yes |
+| Two-source agreement (§4.3) | low | yes |
+| Human confirmation | high, and erodes (§7) | no |
+
+The layers in this document are that oracle. The system-of-record abstraction is what ports
+between domains — repo and test suite for code, WMS and physical scan for the warehouse,
+ledger for finance — while §5 covers the axis no internal record can reach. What must be
+re-derived per domain is the question *"what plays the role of the compiler here?"*
+
+Where the honest answer is *"nothing does,"* that is not a gap to paper over with a larger
+memory. It is the precise point at which abstention (§4.4) and human confirmation are the
+only correct outputs.
+
+## 11. Honest limit
 
 "Never wrong" is not achievable and should not be claimed. The achievable and correct goal:
 
