@@ -317,7 +317,44 @@ The contribution here is the assembly and the through-line (§2, §10), not any 
 mechanism. Treat any claim that this constitutes novel technique with the same skepticism
 the rest of this document applies to unsourced assertions.
 
-## 12. Honest limit
+## 12. Corrections found by implementation
+
+`src/wmsauto/` implements §8 steps 1, 2, 4 and 5. Building it falsified five points
+in the specification above. They are recorded here rather than quietly patched,
+because the gap between a spec and its implementation is the only evidence that
+the spec was ever checked.
+
+1. **"Two independent derivations" (§4.3) was undefined.** Independent *how*?
+   Reading the same WMS row twice is one source read twice, and would have
+   passed a naive implementation. Resolved by defining independence as differing
+   `SourceKind` — a design decision the prose ducked entirely.
+
+2. **No one owned the TTL (§2).** "Facts have TTLs" does not say who sets them.
+   Attaching a TTL to the source is wrong: how fresh is fresh enough depends on
+   what you are about to do, not on where the value came from. Resolved by making
+   the freshness budget a parameter of the *decision site*, not a property of the
+   fact.
+
+3. **Abstention and escalation were collapsed (§4.4).** "I cannot answer, drop
+   it" and "a human must decide now" route differently, alert differently, and
+   are separate metrics. Source disagreement in particular is an escalation, not
+   an abstention — the spec had no way to say that.
+
+4. **§4.1 overclaims.** It says the citation rule is "a type-system constraint."
+   In Python, construction can be forced to carry provenance, but nothing stops
+   a caller reading `fact.value` and passing the bare value onward. The runtime
+   gates catch this at the decision site, which is where it matters, but the
+   claim as written is stronger than what the code delivers. Real enforcement
+   needs a static check banning bare `.value` access outside sanctioned call
+   sites. Not yet written.
+
+5. **§5.3 r2 reads as solved; it is not.** `looks_like_injection` is a
+   heuristic that catches obvious directive-shaped text and would miss anything
+   adapted to it. The load-bearing control is architectural — retrieved text is
+   never placed in an instruction position — and the detector is only defence in
+   depth. The prose implied more than the mechanism provides.
+
+## 13. Honest limit
 
 "Never wrong" is not achievable and should not be claimed. The achievable and correct goal:
 
