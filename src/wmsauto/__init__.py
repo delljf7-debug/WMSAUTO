@@ -6,6 +6,13 @@ wrong model output cannot become a confident, unverifiable, irreversible action.
 
 from .decision import Abstain, AbstainReason, Act, Decision, Escalate, is_action
 from .events import Event, EventLog, EventType
+from .execution import (
+    CommandPolicy,
+    CommandRefused,
+    ShellResult,
+    mutate_via_command,
+    read_via_command,
+)
 from .gates import single_source, two_source
 from .provenance import Fact, MissingProvenance, Provenance, SourceKind, read
 from .signals import ExternalSignal, SignalSource, TriggerKind, should_retrieve
@@ -14,6 +21,8 @@ __all__ = [
     "Abstain",
     "AbstainReason",
     "Act",
+    "CommandPolicy",
+    "CommandRefused",
     "Decision",
     "Escalate",
     "Event",
@@ -23,11 +32,14 @@ __all__ = [
     "Fact",
     "MissingProvenance",
     "Provenance",
+    "ShellResult",
     "SignalSource",
     "SourceKind",
     "TriggerKind",
     "is_action",
+    "mutate_via_command",
     "read",
+    "read_via_command",
     "should_retrieve",
     "single_source",
     "two_source",

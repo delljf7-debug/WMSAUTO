@@ -91,6 +91,31 @@ handoff path. Without a modeled abstention, the agent will always produce *somet
 Monitor the abstention rate. A rate of exactly zero across a week is an alarm, not a
 success.
 
+### 4.5 Execution sits inside the gates, not around them
+
+Shell access is the largest hole in everything above. Every gate in this document
+is bypassed by one unconstrained subprocess call: `UPDATE inventory SET …` does
+not care that §4.3 exists. An agent given a terminal and a grounding layer *beside*
+it has a grounding layer in name only.
+
+Execution is therefore subject to the same rules as any other source and any other
+action:
+
+- **Deny by default.** An allowlist names permitted *programs*, never full command
+  strings, so it cannot be widened by argument smuggling.
+- **Reads produce facts.** Command output becomes a `Fact` citing the argv that
+  produced it. Output that never becomes a fact cannot ground anything downstream.
+- **A non-zero exit is an abstention, not an empty result.** Treating a failed
+  command as "no rows" is the confident-wrongness path in miniature.
+- **Mutations require a gate-issued capability.** A state-changing command takes an
+  `Act` — obtainable only by passing §4.3 — as a required argument. The gate is not
+  a convention a caller can forget; there is no reachable path to a mutation that
+  did not clear it.
+- **No shell interpolation.** Commands are argv lists with `shell=False`.
+  Building a command string from untrusted input is the same defect class as
+  placing retrieved web text in an instruction position (§5.3 r2).
+- **Every invocation is logged, including every refusal.**
+
 ---
 
 ## 5. External signal retrieval (Groq compound)
